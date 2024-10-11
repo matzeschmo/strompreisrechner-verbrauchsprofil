@@ -17,7 +17,7 @@ library(httr2)
 library(glue)
 library(jsonlite)
 library(dplyr)
-
+library(bslib)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -57,18 +57,32 @@ ui <- fluidPage(
             "Daten zusammenfassen:", 
             list("Stündlich" = "hourly", "Täglich" = "daily", "Wöchentlich" = "weekly") 
           ),
+          textOutput("helptext"),
+          a(href="sample.csv", "Beispieldatei herunterladen", download=NA, target="_blank")
         ),
 
         # Show a plot of the generated distribution
         mainPanel(
-           plotOutput("marketDataPlot"),
-           plotOutput("consumptionPricePlot")
+          navset_pill(
+            nav_panel(
+              "Übersicht",
+              plotOutput("marketDataPlot"),
+              plotOutput("consumptionPricePlot")
+            ),
+            nav_panel(
+              "Analyse",
+              "Hier kommt ein fancy ding"
+            ),
+          )
         )
     )
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+    output$helptext <- renderText({
+      "Hinweis: Um das Tool auszuprobieren kann einmal unten die Beispieldatei heruntergeladen und danach unter 'Verbrauch Upload' hochgeladen werden."
+    }) 
   
     time_series_loaded <- reactive({
       req(input$csv_path)
