@@ -10,6 +10,7 @@
 library(shiny)
 library(stringr)
 library(tsibble)
+library(tidyverse)
 library(lubridate)
 library(zoo)
 library(ggplot2)
@@ -18,6 +19,9 @@ library(glue)
 library(jsonlite)
 library(dplyr)
 library(bslib)
+library(fpp3)
+library(fable)
+
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -71,7 +75,7 @@ ui <- fluidPage(
             ),
             nav_panel(
               "Analyse",
-              "Hier kommt ein fancy ding"
+              plotOutput("decompositionPlot")
             ),
           )
         )
@@ -192,7 +196,7 @@ server <- function(input, output, session) {
         geom_point(aes(y=marketprice,colour="Marktpreis (Cent / kWh)"), shape=1) +
         geom_line(aes(y=marketprice,colour="Marktpreis (Cent / kWh)")) +
         geom_point(aes(y = scaling()[1] + consumption*scaling()[2], colour="Verbrauch (kWh)"), shape=1) +
-        geom_line(aes(y = scaling()[1] + consumption*scaling()[2], colour="Verbrauch (kWh)", width=1.1)) +
+        geom_line(aes(y = scaling()[1] + consumption*scaling()[2], colour="Verbrauch (kWh)")) +
         scale_y_continuous("Marktpreis (Cent / kWh)", sec.axis = sec_axis(~ (. - scaling()[1])/scaling()[2], name = "Verbrauch (kWh)")) +
         theme_linedraw() + 
         theme(legend.position = "top") +
@@ -208,8 +212,14 @@ server <- function(input, output, session) {
         theme(legend.position = "top", plot.margin = margin(1,34,1,1, "pt")) +
         labs(title = "Effektiv bezahlter Betrag", y= "Bezahlter Betrag (Cent, Verbrauch * Marktpreis)", x = "Datum / Uhrzeit")
     })
+    output$decompositionPlot <- renderPlot({
+      time_series_aggregated() %>%
+        model(
+          STL(consumption ~ season(period = "1 day") + season(period = "1 week"))
+          ) %>%
+          components() %>% 
+          autoplot()
+    })
 
 }
-
-# Run the application 
 shinyApp(ui = ui, server = server)
