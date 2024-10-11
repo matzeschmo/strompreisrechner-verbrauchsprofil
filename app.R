@@ -61,8 +61,8 @@ ui <- fluidPage(
 
         # Show a plot of the generated distribution
         mainPanel(
-           plotOutput("consumptionPlot"),
-           plotOutput("marketDataPlot")
+           plotOutput("marketDataPlot"),
+           plotOutput("consumptionPricePlot")
         )
     )
 )
@@ -99,7 +99,7 @@ server <- function(input, output, session) {
       market_data_json <- resp |> resp_body_string()
       
       market_data <- as.data.frame(fromJSON(market_data_json))
-      market_data$data.marketprice <- market_data$data.marketprice / 10 * 1.2 + 1.44
+      market_data$data.marketprice <- market_data$data.marketprice / 10 * 1.2
       market_data$data.start_timestamp <- as_datetime(market_data$data.start_timestamp / 1000)
       market_data_time_series <- as_tsibble(market_data[c("data.start_timestamp", "data.marketprice")])
       
@@ -121,6 +121,7 @@ server <- function(input, output, session) {
     time_series_filtered <- reactive({
       time_series_loaded() %>% filter_index(format_ISO8601(input$date_range[1]) ~ format_ISO8601(input$date_range[2]))
     })
+    
     
     time_series_aggregated <- reactive({
       switch(input$select_aggregate, 
@@ -147,6 +148,14 @@ server <- function(input, output, session) {
         )
     })
     
+    scaling <- reactive({
+      ylim.prim <- c(min(time_series_aggregated()$marketprice), max(time_series_aggregated()$marketprice))   
+      ylim.sec <- c(min(time_series_aggregated()$consumption), max(time_series_aggregated()$consumption))   
+      b <- diff(ylim.prim)/diff(ylim.sec)
+      a <- ylim.prim[1] - b*ylim.sec[1]
+      return(c(a, b))
+    })
+    
     market_data_filtered <- reactive({
       filter_index(market_data_time_series, format_ISO8601(input$date_range[1]) ~ format_ISO8601(input$date_range[2]))
     })
@@ -160,31 +169,30 @@ server <- function(input, output, session) {
     })
     
     output$average_price <- renderText({
-      paste("Durchnittspreis", format(round(sum(time_series_filtered()$amount_payed) / sum(time_series_filtered()$consumption), 2), nsmall = 2), "Cent / kWh")
+      paste("Durchnittspreis", format(round(sum(time_series_filtered()$amount_payed) / sum(time_series_filtered()$consumption), 2), nsmall = 2), "Cent / kWh (Brutto ohne Tarifaufschlag)")
     })
-
-    output$consumptionPlot <- renderPlot({
-        # draw the histogram with the specified number of bins
+    
+    output$marketDataPlot <- renderPlot({
       ggplot(time_series_aggregated()) + 
         aes(x = aggregated_index) +
         geom_point(aes(y=marketprice,colour="Marktpreis (Cent / kWh)"), shape=1) +
         geom_line(aes(y=marketprice,colour="Marktpreis (Cent / kWh)")) +
-        geom_point(aes(y=amount_payed,colour="Bezahlter Betrag (Cent, Verbrauch * Marktpreis)"), shape=1) +
-        geom_line(aes(y=amount_payed,colour="Bezahlter Betrag (Cent, Verbrauch * Marktpreis)"), size=1.2) + 
+        geom_point(aes(y = scaling()[1] + consumption*scaling()[2], colour="Verbrauch (kWh)"), shape=1) +
+        geom_line(aes(y = scaling()[1] + consumption*scaling()[2], colour="Verbrauch (kWh)", width=1.1)) +
+        scale_y_continuous("Marktpreis (Cent / kWh)", sec.axis = sec_axis(~ (. - scaling()[1])/scaling()[2], name = "Verbrauch (kWh)")) +
         theme_linedraw() + 
         theme(legend.position = "top") +
-        labs(title = "Verbrauchsprofil und Marktpreise", y= "Cent", x = "Datum / Uhrzeit") +
-        scale_color_manual(values = c("blue", "darkgray"))
+        labs(title = "Marktpreis und Verbrauchsprofil", x = "Datum / Uhrzeit")
     })
     
-    output$marketDataPlot <- renderPlot({
-      # draw the histogram with the specified number of bins
+    output$consumptionPricePlot <- renderPlot({
       ggplot(time_series_aggregated()) + 
         aes(x = aggregated_index) +
-        geom_point(aes(y=consumption)) +
-        geom_line(aes(y=consumption)) +
+        geom_point(aes(y=amount_payed)) +
+        geom_line(aes(y=amount_payed)) +
         theme_linedraw() + 
-        labs(title = "Verbrauch", y= "Verbrauch (kwH)", x = "Datum / Uhrzeit")
+        theme(legend.position = "top", plot.margin = margin(1,34,1,1, "pt")) +
+        labs(title = "Effektiv bezahlter Betrag", y= "Bezahlter Betrag (Cent, Verbrauch * Marktpreis)", x = "Datum / Uhrzeit")
     })
 
 }
